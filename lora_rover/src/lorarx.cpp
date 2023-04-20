@@ -112,8 +112,8 @@ int main()
 
             packet.value1 = (int8_t)buffer[0];
             packet.value2 = (int8_t)buffer[1];
-            packet.value3 = (uint8_t) ((buffer[2] & 0xF0) >> 4);
-            packet.value4 = (uint8_t) (buffer[2] & 0x0F);
+            packet.value3 = (uint8_t) (buffer[2] & 0x0F);
+            packet.value4 = (uint8_t) ((buffer[2] & 0xF0) >> 4);
             printf("Received Packet: %d %d %d %d\n", packet.value1, packet.value2, packet.value3, packet.value4);
         }
     }
