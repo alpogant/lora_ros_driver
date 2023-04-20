@@ -1,3 +1,10 @@
+/****************************************************************************/
+//   Description: This code sends specified buffer through termios serial lib
+//   Created On: 21/04/2023
+//   Created By: Alperen Demirkol
+/****************************************************************************/
+
+
 #include <iostream>
 #include <cstdio>
 #include <cstring>
