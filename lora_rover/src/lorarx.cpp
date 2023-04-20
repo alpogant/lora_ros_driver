@@ -73,6 +73,8 @@ int main()
     while (true)
     {
         uint8_t buffer[sizeof(Packet)];
+        
+        //tcflush(fd, TCIFLUSH);
         ssize_t n = read(fd, buffer, sizeof(buffer)); // read a packet
 
         if (n == sizeof(buffer))
