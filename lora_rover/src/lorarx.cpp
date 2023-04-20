@@ -1,3 +1,11 @@
+/****************************************************************************/
+//   Description: This code receives specified buffer through termios serial
+//                library and extracts meaningful values.
+//   Created On: 21/04/2023
+//   Created By: Alperen Demirkol
+/****************************************************************************/
+
+
 #include <iostream>
 #include <cstring>
 #include <fcntl.h>
