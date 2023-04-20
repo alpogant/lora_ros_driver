@@ -5,22 +5,35 @@
 #include <unistd.h>
 #include <stdint.h>
 
-#define PACKET_SIZE 6
+#define BAUDRATE B9600
+#define DEVICE "/dev/ttyUSB0"
 
-// CRC-16 polynomial: x^16 + x^15 + x^2 + 1 (0x8005)
-uint16_t crc16(uint8_t *data, size_t length) 
+// Define packet struct
+#pragma pack(push, 1)
+typedef struct {
+    int8_t value1;
+    int8_t value2;
+    uint8_t value3;
+    uint8_t value4;
+    uint16_t crc;
+    uint8_t newline;
+} Packet;
+#pragma pack(pop)
+
+// Function to calculate CRC16
+uint16_t crc16(const uint8_t* data, size_t length)
 {
     uint16_t crc = 0xFFFF;
-    for (size_t i = 0; i < length; i++) 
+    for (size_t i = 0; i < length; ++i)
     {
         crc ^= (uint16_t)data[i] << 8;
-        for (int j = 0; j < 8; j++) 
+        for (size_t j = 0; j < 8; ++j)
         {
-            if (crc & 0x8000) 
+            if (crc & 0x8000)
             {
-                crc = (crc << 1) ^ 0x8005;
-            } 
-            else 
+                crc = (crc << 1) ^ 0x1021;
+            }
+            else
             {
                 crc <<= 1;
             }
@@ -29,71 +42,79 @@ uint16_t crc16(uint8_t *data, size_t length)
     return crc;
 }
 
-int main(int argc, char* argv[])
+int main()
 {
-    if (argc < 2) {
-        std::cout << "Usage: " << argv[0] << " <serial_port>" << std::endl;
-        return 1;
-    }
+    int fd;
+    struct termios tty;
+    memset(&tty, 0, sizeof(tty));
+    tcgetattr(fd, &tty);
+    cfsetispeed(&tty, B9600);
+    cfsetospeed(&tty, B9600);
+    tty.c_cflag &= ~PARENB;
+    tty.c_cflag &= ~CSTOPB;
+    tty.c_cflag &= ~CSIZE;
+    tty.c_cflag |= CS8;
+    tty.c_cflag &= ~CRTSCTS;
+    tty.c_cflag |= CREAD | CLOCAL;
+    tty.c_iflag &= ~(IXON | IXOFF | IXANY);
+    tty.c_iflag &= ~(ICANON | ECHO | ECHOE | ISIG);
+    tty.c_oflag &= ~OPOST;
+    tty.c_cc[VMIN] = 0;
+    tty.c_cc[VTIME] = 10;
+    tcsetattr(fd, TCSANOW, &tty);
+    fd = open(DEVICE, O_RDWR | O_NOCTTY | O_SYNC);
 
-    // Open the serial port
-    int serial_fd = open(argv[1], O_RDWR | O_NOCTTY | O_NONBLOCK);
-    if (serial_fd == -1) {
-        std::cerr << "Failed to open serial port" << std::endl;
-        return 1;
-    }
-
-    // Configure the serial port
-    struct termios options;
-    tcgetattr(serial_fd, &options);
-    cfsetispeed(&options, B9600);
-    cfsetospeed(&options, B9600);
-    options.c_cflag &= ~PARENB;
-    options.c_cflag &= ~CSTOPB;
-    options.c_cflag &= ~CSIZE;
-    options.c_cflag |= CS8;
-    options.c_cflag &= ~CRTSCTS;
-    options.c_cflag |= CREAD | CLOCAL;
-    options.c_iflag &= ~(IXON | IXOFF | IXANY);
-    options.c_iflag &= ~(ICANON | ECHO | ECHOE | ISIG);
-    options.c_oflag &= ~OPOST;
-    options.c_cc[VMIN] = 0;
-    options.c_cc[VTIME] = 10;
-    tcsetattr(serial_fd, TCSANOW, &options);
-
-    // Receive and process data packets
-    uint8_t buffer[PACKET_SIZE];
-    uint16_t expected_crc, actual_crc;
-
-    while (true) 
+    if (fd < 0)
     {
-        int bytes_received = read(serial_fd, buffer, PACKET_SIZE);
-        if (bytes_received == PACKET_SIZE) 
+        std::cerr << "Error opening " << DEVICE << std::endl;
+        return 1;
+    }
+
+    while (true)
+    {
+        uint8_t buffer[sizeof(Packet)];
+        ssize_t n = read(fd, buffer, sizeof(buffer)); // read a packet
+
+        if (n == sizeof(buffer))
         {
-            // Calculate the expected CRC
-            expected_crc = (uint16_t)buffer[4] << 8 | (uint16_t)buffer[5];
-
-            // Calculate the actual CRC of the data
-            actual_crc = crc16(buffer, 4);
-
-            // Verify the CRC
-            if (expected_crc != actual_crc) 
+            // Check the newline character
+            if (buffer[sizeof(Packet)-1] != '\n')
             {
-                std::cerr << "ERROR: CRC mismatch" << std::endl;
+                std::cerr << "Error: newline character not found" << std::endl;
                 continue;
             }
 
-            // Extract the data from the buffer
-            uint8_t value1 = buffer[0];
-            uint8_t value2 = buffer[1];
-            uint8_t value3 = buffer[2];
-            uint8_t value4 = buffer[3];
+            // Extract packet data
+            Packet packet;
+            memcpy(&packet, buffer, sizeof(Packet));
 
-            // Print the data to the terminal
-            std::cout << "Received: " << static_cast<unsigned>(value1) << ", "
-                      << static_cast<unsigned>(value2) << ", "
-                      << static_cast<unsigned>(value3) << ", "
-                      << static_cast<unsigned>(value4) << ", ";
+            // Extract packet data and CRC
+            uint8_t packet_data[4];
+            uint16_t packet_crc = 0;
+            for (int i = 0; i < 6; i++) 
+            {
+                if (i < 4) 
+                {
+                    packet_data[i] = buffer[i];
+                } else if (i < 6) 
+                {
+                    packet_crc |= (uint16_t)buffer[i] << ((i-4)*8);
+                }
+            }
+
+            // Verify CRC
+            uint16_t crc = crc16(buffer, sizeof(Packet)-3);
+            if (crc != packet.crc)
+            {
+                std::cerr << "CRC mismatch" << std::endl;
+                continue;
+            }
+
+            packet.value1 = (int8_t)buffer[0];
+            packet.value2 = (int8_t)buffer[1];
+            packet.value3 = (uint8_t) ((buffer[2] & 0xF0) >> 4);
+            packet.value4 = (uint8_t) (buffer[2] & 0x0F);
+            printf("Received Packet: %d %d %d %d\n", packet.value1, packet.value2, packet.value3, packet.value4);
         }
     }
 }
