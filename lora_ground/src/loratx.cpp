@@ -1,3 +1,11 @@
+/****************************************************************************/
+//   Description: This code fills buffer using specified values through termios
+//                serial library.
+//   Created On: 21/04/2023
+//   Created By: Alperen Demirkol
+/****************************************************************************/
+
+
 #include <iostream>
 #include <cstdio>
 #include <cstring>

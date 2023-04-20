@@ -1,3 +1,11 @@
+/****************************************************************************/
+//   Description: This code receives specified buffer through termios serial
+//                library and extracts meaningful values.
+//   Created On: 21/04/2023
+//   Created By: Alperen Demirkol
+/****************************************************************************/
+
+
 #include <iostream>
 #include <cstring>
 #include <fcntl.h>
@@ -73,6 +81,8 @@ int main()
     while (true)
     {
         uint8_t buffer[sizeof(Packet)];
+        
+        //tcflush(fd, TCIFLUSH);
         ssize_t n = read(fd, buffer, sizeof(buffer)); // read a packet
 
         if (n == sizeof(buffer))
@@ -87,34 +97,26 @@ int main()
             // Extract packet data
             Packet packet;
             memcpy(&packet, buffer, sizeof(Packet));
-
-            // Extract packet data and CRC
-            uint8_t packet_data[4];
-            uint16_t packet_crc = 0;
-            for (int i = 0; i < 6; i++) 
-            {
-                if (i < 4) 
-                {
-                    packet_data[i] = buffer[i];
-                } else if (i < 6) 
-                {
-                    packet_crc |= (uint16_t)buffer[i] << ((i-4)*8);
-                }
-            }
+            
+            packet.value1 = (int8_t)buffer[0];
+            packet.value2 = (int8_t)buffer[1];
+            packet.value3 = (uint8_t) (buffer[2] & 0x0F);
+            packet.value4 = (uint8_t) ((buffer[2] & 0xF0) >> 4);
+            printf("Received Packet: %d %d %d %d\n", packet.value1, packet.value2, packet.value3, packet.value4);
+            
+            packet.crc = ((uint16_t)buffer[3] << 8) | (uint16_t)buffer[4];
+            
+            //calculated crc
+            uint16_t crc = crc16(reinterpret_cast<uint8_t*>(&packet), sizeof(packet) - 3);
 
             // Verify CRC
-            uint16_t crc = crc16(buffer, sizeof(Packet)-3);
             if (crc != packet.crc)
             {
                 std::cerr << "CRC mismatch" << std::endl;
                 continue;
             }
 
-            packet.value1 = (int8_t)buffer[0];
-            packet.value2 = (int8_t)buffer[1];
-            packet.value3 = (uint8_t) ((buffer[2] & 0xF0) >> 4);
-            packet.value4 = (uint8_t) (buffer[2] & 0x0F);
-            printf("Received Packet: %d %d %d %d\n", packet.value1, packet.value2, packet.value3, packet.value4);
+
         }
     }
 }
