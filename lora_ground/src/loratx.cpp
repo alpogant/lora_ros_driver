@@ -13,7 +13,7 @@
 #include <fcntl.h>
 #include <termios.h>
 
-#define SERIAL_PORT "/dev/ttyUSB0"
+#define SERIAL_PORT "/dev/ttyUSB1"
 #define BAUD_RATE B9600
 #define PACKET_SIZE 6
 
@@ -79,15 +79,18 @@ int main()
         packet.value2 = -45;
         packet.value3 = 6;
         packet.value4 = 7;
-        packet.crc = crc16(reinterpret_cast<uint8_t*>(&packet), sizeof(packet) - 1);
+        packet.crc = crc16(reinterpret_cast<uint8_t*>(&packet), 4);
+
+        // printf("crc");
+        // printf("%02X", packet.crc);
 
         // Fill Buffer
         uint8_t buffer[PACKET_SIZE] = {0};
         buffer[0] = (uint8_t)packet.value1;
         buffer[1] = (uint8_t)packet.value2;
         buffer[2] = ((uint8_t)packet.value3 & 0x0F) | (((uint8_t)packet.value4 & 0x0F) << 4);
-        buffer[3] = ((uint8_t)packet.crc >> 8) & 0xFF;
-        buffer[4] = (uint8_t)packet.crc & 0xFF;
+        buffer[3] = (uint8_t)((packet.crc ^ (packet.crc & 0xFF)) >> 8);
+        buffer[4] = (uint8_t)(packet.crc ^ (buffer[3] << 8));
         buffer[5] = '\n';
 
         /*
@@ -109,7 +112,7 @@ int main()
         printf("\n");
 
         write(fd, buffer, sizeof(buffer));
-        usleep(100000);  // wait 100ms
+        usleep(1000000);  // wait 1000ms
     }
 
     close(fd);
